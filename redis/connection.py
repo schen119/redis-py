@@ -353,8 +353,7 @@ class HiredisParser(BaseParser):
         if not HIREDIS_SUPPORTS_CALLABLE_ERRORS:
             kwargs['replyError'] = ResponseError
 
-        if connection.encoder.decode_responses:
-            kwargs['encoding'] = connection.encoder.encoding
+        self.encoder = connection.encoder
         self._reader = hiredis.Reader(**kwargs)
         self._next_response = False
 
@@ -362,6 +361,7 @@ class HiredisParser(BaseParser):
         self._sock = None
         self._reader = None
         self._next_response = False
+        self.encoder = None
 
     def can_read(self):
         if not self._reader:
@@ -376,14 +376,11 @@ class HiredisParser(BaseParser):
             raise ConnectionError(SERVER_CLOSED_CONNECTION_ERROR)
 
         # _next_response might be cached from a can_read() call
-        if self._next_response is not False:
-            response = self._next_response
-            self._next_response = False
-            return response
+        if self._next_response is False:
+            self._next_response = self._reader.gets()
 
-        response = self._reader.gets()
         socket_read_size = self.socket_read_size
-        while response is False:
+        while self._next_response is False:
             try:
                 if HIREDIS_USE_BYTE_BUFFER:
                     bufflen = recv_into(self._sock, self._buffer)
@@ -404,7 +401,12 @@ class HiredisParser(BaseParser):
                 self._reader.feed(self._buffer, 0, bufflen)
             else:
                 self._reader.feed(buffer)
-            response = self._reader.gets()
+            self._next_response = self._reader.gets()
+
+        # reset the _next_response
+        response = self._next_response
+        self._next_response = False
+
         # if an older version of hiredis is installed, we need to attempt
         # to convert ResponseErrors to their appropriate types.
         if not HIREDIS_SUPPORTS_CALLABLE_ERRORS:
@@ -421,6 +423,10 @@ class HiredisParser(BaseParser):
         elif isinstance(response, list) and response and \
                 isinstance(response[0], ConnectionError):
             raise response[0]
+
+        # if the response is bytes, decode it if necessary
+        if isinstance(response, bytes):
+            response = self.encoder.decode(response)
         return response
 
 
