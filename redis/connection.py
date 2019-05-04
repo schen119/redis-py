@@ -280,7 +280,11 @@ class PythonParser(BaseParser):
         return self._buffer and bool(self._buffer.length)
 
     def read_response(self):
-        response = self._buffer.readline()
+        try:
+            response = self._buffer.readline()
+        except:
+            print("SC Debug: race condition that the _buffer is already released")
+            return None
         if not response:
             raise ConnectionError(SERVER_CLOSED_CONNECTION_ERROR)
 
