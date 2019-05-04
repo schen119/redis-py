@@ -1,3 +1,11 @@
+import os
+import re
+import sys
+dir_path = os.path.dirname(os.path.realpath(__file__))
+idx = [m.start() for m in re.finditer('/', dir_path)]
+sys.path.append(dir_path[0:idx[-1]])
+
+
 from redis.client import Redis, StrictRedis
 from redis.connection import (
     BlockingConnectionPool,
